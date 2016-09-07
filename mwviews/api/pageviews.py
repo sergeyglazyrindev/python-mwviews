@@ -4,12 +4,24 @@ from requests.utils import quote
 from datetime import date, datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
+from .exceptions import ApiLimitExceeded
 
 endpoints = {
     'article': 'https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article',
     'project': 'https://wikimedia.org/api/rest_v1/metrics/pageviews/aggregate',
     'top': 'https://wikimedia.org/api/rest_v1/metrics/pageviews/top',
 }
+
+
+def get_wikipedia_error(results):
+    for result in results:
+        if result.status_code == requests.codes.too_many:
+            return ApiLimitExceeded()
+    return Exception(
+        'The pageview API returned nothing useful at: {}'.format(
+            [result.url for result in results]
+        )
+    )
 
 
 def parse_date(stringDate):
@@ -36,7 +48,7 @@ def month_from_day(dt):
 
 class PageviewsClient:
 
-    def __init__(self, parallelism=10):
+    def __init__(self, parallelism=10, custom_http_headers=None):
         """
         Create a PageviewsClient
 
@@ -45,6 +57,7 @@ class PageviewsClient:
                           multiple requests to the API at the same time
         """
         self.parallelism = parallelism
+        self.custom_http_headers = custom_http_headers
 
     def article_views(
             self, project, articles,
@@ -131,9 +144,7 @@ class PageviewsClient:
                 for item in result['items']:
                     output[parse_date(item['timestamp'])][item['article']] = item['views']
             if not some_data_returned:
-                raise Exception(
-                    'The pageview API returned nothing useful at: {}'.format(urls)
-                )
+                raise get_wikipedia_error([result])
 
             if granularity == 'monthly':
                 output_monthly = {}
@@ -238,9 +249,7 @@ class PageviewsClient:
                     output[parse_date(item['timestamp'])][item['project']] = item['views']
 
             if not some_data_returned:
-                raise Exception(
-                    'The pageview API returned nothing useful at: {}'.format(urls)
-                )
+                raise get_wikipedia_error(results)
             return output
         except:
             print('ERROR while fetching and parsing ' + str(urls))
@@ -300,11 +309,9 @@ class PageviewsClient:
             traceback.print_exc()
             raise
 
-        raise Exception(
-            'The pageview API returned nothing useful at: {}'.format(url)
-        )
+        raise get_wikipedia_error([result])
 
     def get_concurrent(self, urls):
         with ThreadPoolExecutor(self.parallelism) as executor:
-            f = lambda url: requests.get(url).json()
+            f = lambda url: requests.get(url, headers=self.custom_http_headers).json()
             return list(executor.map(f, urls))

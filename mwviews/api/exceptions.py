@@ -1,0 +1,2 @@
+class ApiLimitExceeded(Exception):
+    pass
