@@ -137,6 +137,7 @@ class PageviewsClient:
             results = self.get_concurrent(urls)
             some_data_returned = False
             for result in results:
+                result = result.json()
                 if 'items' in result:
                     some_data_returned = True
                 else:
@@ -144,7 +145,7 @@ class PageviewsClient:
                 for item in result['items']:
                     output[parse_date(item['timestamp'])][item['article']] = item['views']
             if not some_data_returned:
-                raise get_wikipedia_error([result])
+                raise get_wikipedia_error(results)
 
             if granularity == 'monthly':
                 output_monthly = {}
@@ -241,6 +242,7 @@ class PageviewsClient:
             results = self.get_concurrent(urls)
             some_data_returned = False
             for result in results:
+                result = result.json()
                 if 'items' in result:
                     some_data_returned = True
                 else:
@@ -298,10 +300,10 @@ class PageviewsClient:
         url = '/'.join([endpoints['top'], project, access, year, month, day])
 
         try:
-            result = requests.get(url).json()
-
-            if 'items' in result and len(result['items']) == 1:
-                r = result['items'][0]['articles']
+            result = requests.get(url)
+            json_res = result.json()
+            if 'items' in json_res and len(json_res['items']) == 1:
+                r = json_res['items'][0]['articles']
                 r.sort(key=lambda x: x['rank'])
                 return r[0:(limit)]
         except:
@@ -313,5 +315,5 @@ class PageviewsClient:
 
     def get_concurrent(self, urls):
         with ThreadPoolExecutor(self.parallelism) as executor:
-            f = lambda url: requests.get(url, headers=self.custom_http_headers).json()
+            f = lambda url: requests.get(url, headers=self.custom_http_headers)
             return list(executor.map(f, urls))
