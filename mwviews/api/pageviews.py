@@ -13,15 +13,16 @@ endpoints = {
 }
 
 
-def get_wikipedia_error(results):
+def get_wikipedia_error(results, return_error=False):
     for result in results:
         if result.status_code == requests.codes.too_many:
             return ApiLimitExceeded()
-    return Exception(
-        'The pageview API returned nothing useful at: {}'.format(
-            [result.url for result in results]
+    if return_error:
+        return Exception(
+            'The pageview API returned nothing useful at: {}'.format(
+                [result.url for result in results]
+            )
         )
-    )
 
 
 def parse_date(stringDate):
@@ -144,8 +145,9 @@ class PageviewsClient:
                     continue
                 for item in result['items']:
                     output[parse_date(item['timestamp'])][item['article']] = item['views']
-            if not some_data_returned:
-                raise get_wikipedia_error(results)
+            error = get_wikipedia_error(results, return_error=not some_data_returned)
+            if error:
+                raise error
 
             if granularity == 'monthly':
                 output_monthly = {}
@@ -250,8 +252,9 @@ class PageviewsClient:
                 for item in result['items']:
                     output[parse_date(item['timestamp'])][item['project']] = item['views']
 
-            if not some_data_returned:
-                raise get_wikipedia_error(results)
+            error = get_wikipedia_error(results, return_error=not some_data_returned)
+            if error:
+                raise error
             return output
         except:
             print('ERROR while fetching and parsing ' + str(urls))
